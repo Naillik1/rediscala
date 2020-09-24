@@ -1,56 +1,28 @@
-import com.typesafe.sbt.SbtGit.{GitKeys => git}
-import sbt.Tests.{InProcess, Group}
 
-val akkaVersion = "2.5.25"
-
-val akkaActor = "com.typesafe.akka" %% "akka-actor" % akkaVersion
-
-val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % akkaVersion
-
-val specs2 = "org.specs2" %% "specs2-core" % "4.8.0"
-
-val stm = "org.scala-stm" %% "scala-stm" % "0.9.1"
-
-val scalacheck = "org.scalacheck" %% "scalacheck" % "1.14.2"
-
-//val scalameter = "com.github.axel22" %% "scalameter" % "0.4"
-
-val rediscalaDependencies = Seq(
-  akkaActor,
-  stm,
-  akkaTestkit % "test",
-  //scalameter % "test",
-  specs2 % "test",
-  scalacheck % "test"
-)
-
-
-val baseSourceUrl = "https://github.com/etaty/rediscala/tree/"
-
-val Scala211 = "2.11.12"
-
-lazy val standardSettings = Def.settings(
-  name := "rediscala",
-  organization := "com.github.etaty",
-  scalaVersion := Scala211,
-  crossScalaVersions := Seq(Scala211, "2.12.10", "2.13.0"),
+lazy val common = Seq(
+  organization := "com.github.Naillik1",
+  publishTo := sonatypePublishTo.value,
+  scalaVersion := "2.12.11",
+  crossScalaVersions := Seq(scalaVersion.value, "2.11.12", "2.13.2"),
   licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
-  homepage := Some(url("https://github.com/etaty/rediscala")),
-  scmInfo := Some(ScmInfo(url("https://github.com/etaty/rediscala"), "scm:git:git@github.com:etaty/rediscala.git")),
+  homepage := Some(url("https://github.com/Naillik1/rediscala")),
+  scmInfo := Some(ScmInfo(url("https://github.com/Naillik1/rediscala"), "scm:git:git@github.com:Naillik1/rediscala.git")),
   apiURL := Some(url("http://etaty.github.io/rediscala/latest/api/")),
-  pomExtra := (
+  pomExtra :=
     <developers>
       <developer>
-        <id>etaty</id>
-        <name>Valerian Barbot</name>
-        <url>http://github.com/etaty/</url>
+        <id>Naillik1</id>
+        <name>Valerian Barbot, The Rediscala community</name>
+        <url>http://github.com/Naillik1/</url>
       </developer>
-    </developers>
-    ),
-  publishTo := sonatypePublishTo.value,
+    </developers>,
+  resolvers ++= Seq(
+    "Typesafe repository snapshots" at "https://repo.typesafe.com/typesafe/snapshots/",
+    "Typesafe repository releases" at "https://repo.typesafe.com/typesafe/releases/",
+    // using staging artifact until 2.13 release is ready: https://github.com/apache/logging-log4j-scala/pull/3
+    "Apache staging repository" at "https://repository.apache.org/content/repositories/staging"
+  ),
   publishMavenStyle := true,
-  git.gitRemoteRepo := "git@github.com:etaty/rediscala.git",
-
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
     "-Xlint",
@@ -59,87 +31,45 @@ lazy val standardSettings = Def.settings(
     "-language:postfixOps",
     "-unchecked"
   ),
-  scalacOptions in (Compile, doc) ++= {
+
+  libraryDependencies ++= {
+    val akkaVersion = "2.5.23"
     Seq(
-      "-sourcepath", (baseDirectory in LocalProject("rediscala")).value.getAbsolutePath
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+      "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
+      "org.scalatest"            %% "scalatest"       % "3.0.8" % Test,
+      "org.scalacheck"           %% "scalacheck"      % "1.14.0" % Test,
+      "org.apache.logging.log4j" % "log4j-api"        % "2.11.2" % Test,
+      "org.apache.logging.log4j" % "log4j-core"       % "2.11.2" % Test,
+      "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.11.2" % Test,
+      "org.scala-stm" %% "scala-stm" % "0.9.1"
     )
   },
+
   autoAPIMappings := true,
-  apiURL := Some(url("http://etaty.github.io/rediscala/")),
-  scalacOptions in (Compile, doc) ++= {
-    val v = (version in LocalProject("rediscala")).value
-    val branch = if(v.trim.endsWith("SNAPSHOT")) "master" else v
-    Seq[String](
-      "-doc-source-url", baseSourceUrl + branch +"€{FILE_PATH}.scala"
+
+  // TODO create new github pages target
+  apiURL := Some(url("http://etaty.github.io/rediscala/"))
+)
+
+lazy val root = (project in file(".")).settings(
+  common,
+  name := "rediscala",
+  logBuffered in Test := true,
+  libraryDependencies ++= Seq(
+    // log4j-api-scala brings in scalatest 3.2.0-M1
+    "org.apache.logging.log4j" %% "log4j-api-scala" % "12.0" % "test->test" exclude("org.scalatest", "*")
+  )
+)
+
+lazy val bench = (project in file("src/bench"))
+  .settings(
+    name := "rediscala-bench",
+    testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework"),
+    parallelExecution in Test := false,
+    logBuffered := false,
+    libraryDependencies ++= Seq(
+      "com.storm-enroute" %% "scalameter" % "0.9"
     )
-  },
-  siteMappings ++= {
-    for((f, d) <- (mappings in packageDoc in Compile).value) yield (f, (version in LocalProject("rediscala")).value + "/api/" + d)
-  },
-  ghpagesCleanSite := {
-    val dir = ghpagesUpdatedRepository.value
-    val v = (version in LocalProject("rediscala")).value
-    val toClean = IO.listFiles(dir).filter{ f =>
-      val p = f.getName
-      p.startsWith("latest") || p.startsWith(v)
-    }.map(_.getAbsolutePath).toList
-    val log = streams.value.log
-    val gitRunner = git.gitRunner.value
-    if(toClean.nonEmpty)
-      gitRunner.apply(("rm" :: "-r" :: "-f" :: "--ignore-unmatch" :: toClean) :_*)(dir, log)
-    ()
-  },
-  ghpagesSynchLocal := {
-    val clean = ghpagesCleanSite.value
-    val repo = ghpagesUpdatedRepository.value
-    // TODO - an sbt.Synch with cache of previous mappings to make this more efficient. */
-    val betterMappings = ghpagesPrivateMappings.value map { case (file, target) => (file, repo / target) }
-    // First, remove 'stale' files.
-    //cleanSite.
-    // Now copy files.
-    IO.copy(betterMappings)
-    if(ghpagesNoJekyll.value) IO.touch(repo / ".nojekyll")
-    repo
-  },
-  siteSubdirName in SiteScaladoc := "latest/api"
-)
-
-lazy val BenchTest = config("bench") extend Test
-
-lazy val benchTestSettings = inConfig(BenchTest)(Defaults.testSettings ++ Seq(
-  sourceDirectory in BenchTest := baseDirectory.value / "src/benchmark",
-  //testOptions in BenchTest += Tests.Argument("-preJDK7"),
-  testFrameworks in BenchTest := Seq(new TestFramework("org.scalameter.ScalaMeterFramework")),
-
-  //https://github.com/sbt/sbt/issues/539 => bug fixed in sbt 0.13.x
-  testGrouping in BenchTest := (definedTests in BenchTest map partitionTests).value
-))
-
-lazy val root = Project(id = "rediscala",
-  base = file(".")
-).settings(
-  standardSettings,
-  libraryDependencies ++= rediscalaDependencies
-).configs(
-  BenchTest
-).enablePlugins(
-  SiteScaladocPlugin, GhpagesPlugin
-)
-
-lazy val benchmark = {
-  import pl.project13.scala.sbt.JmhPlugin
-
-  Project(
-    id = "benchmark",
-    base = file("benchmark")
-  ).settings(Seq(
-    scalaVersion := Scala211,
-    libraryDependencies += "net.debasishg" %% "redisclient" % "3.0"
-  ))
-    .enablePlugins(JmhPlugin)
-    .dependsOn(root)
-}
-
-def partitionTests(tests: Seq[TestDefinition]) = {
-  Seq(new Group("inProcess", tests, InProcess))
-}
+  )
+  .dependsOn(root)
