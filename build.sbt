@@ -1,3 +1,6 @@
+githubOwner := "Naillik1"
+githubRepository := "rediscala"
+githubTokenSource := TokenSource.GitConfig("github.token")
 
 lazy val common = Seq(
   organization := "com.github.Naillik1",
@@ -48,8 +51,6 @@ lazy val common = Seq(
 
   autoAPIMappings := true,
 
-  // TODO create new github pages target
-  apiURL := Some(url("http://etaty.github.io/rediscala/"))
 )
 
 lazy val root = (project in file(".")).settings(
